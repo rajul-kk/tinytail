@@ -57,8 +57,9 @@ This architecture is recalled from the MLPerf Tiny paper and repo and must be co
 **Decision.** Architecture follows MLPerf Tiny, so the reproduction concerns the model and the latency/energy method. Timing for dense int8
 layers does not depend on data values (no data-dependent branches except saturation), so the dataset choice affects the accuracy claim, not
 the timing claim. That is itself a checked assumption: the harness cycles through several input classes and tests input-dependence of latency.
-The training script supports `--data synthetic` (default; CI and timing harness), `--data toyadmos` and `--data cwru` (both require the user to
-download data; CWRU uses a smaller 1024-in autoencoder). **No accuracy reproduction is claimed unless a real dataset is used and the AUC is reported.**
+The training script `models/train_ad.py` takes `--synthetic N` (random feature vectors; tests and timing harness) or `--data DIR`
+(a DCASE 2020 Task 2 machine-type folder with `train/*.wav` and optional `test/*.wav`, downloaded by the user; log-mel
+features computed with numpy/scipy). A CWRU path is not implemented. **No accuracy reproduction is claimed unless a real dataset is used and the AUC is reported.**
 
 ## 4. Measurement method
 
@@ -108,6 +109,10 @@ Implemented in `src/pwcet/` and tested on synthetic traces with known answers.
 7. **Held-out validation.** Fit on the earlier part of a session, count exceedances in the later part (preferably another power cycle); binomial test of observed against expected count; report pessimism ratio (pWCET / observed max).
 8. **Verdict labels:** `EVT-valid`, `EVT-invalid-dependent`, `EVT-invalid-nonstationary`, `EVT-invalid-poor-fit`, `degenerate`. Rules are in PROTOCOL.md.
 
+The frozen values in `protocol/PROTOCOL.md` supersede the numbers in this section. Main differences: each gate test is run
+at 0.05/4 (Bonferroni over the four tests), the GEV uses 100 blocks, the GPD threshold is the lowest of the 0.90 / 0.95 /
+0.975 / 0.99 quantiles whose fit passes, and held-out validation uses an exact interval with a tolerance factor of 2.
+
 Not implemented in v0.1 (stated, not hidden): declustering with an extremal index, time-varying GPD, Bayesian EVT, bootstrap confidence intervals on pWCET, and a conservative analytic WCET comparison.
 
 ## 7. Decisions and rejected alternatives (summary)
@@ -133,6 +138,9 @@ Not implemented in v0.1 (stated, not hidden): declustering with an extremal inde
 - R8. Scoop risk from a shallow search (scoop_check.md).
 - R9. No hardware yet: only the pipeline on synthetic traces is validated.
 - R10. Input-dependent latency would add a mixture component; the harness records `input_id` and checks.
+- R11. A negative-shape GPD (or GEV) can fit the observed tail well and still be optimistic far below 1e-4 when the
+  true tail is light but unbounded. On a synthetic interference trace with Gaussian miss jitter, the 1e-6 to 1e-9 GPD
+  bounds were exceeded by held-out runs (README). Held-out data can expose this only down to about 1e-6.
 
 ## 9. Renode fallback and its fidelity
 
@@ -140,4 +148,6 @@ Renode (open source, Antmicro) models the instruction set functionally and runs 
 
 ## 10. State at this commit
 
-Done on the host: statistical pipeline and tests, training/quantisation script, firmware skeletons. Not done: any hardware measurement, any energy measurement, any real-dataset accuracy.
+Done on the host: the statistical pipeline (gates, GPD, GEV, MBPTA-CV-style baseline, held-out validation, analysis CLI) with tests
+on synthetic traces, the pre-registered protocol, and the training/int8-export script (run only on random features). Not done:
+firmware (the `firmware/` folder is empty), Renode runs, any hardware measurement, any energy measurement, any real-dataset accuracy.
