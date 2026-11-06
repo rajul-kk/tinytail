@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pwcet"
+version = "0.0.1"
+description = "Empirical study of MBPTA/EVT validity for int8 TinyML inference timing (skeleton)"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy", "scipy", "statsmodels"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
