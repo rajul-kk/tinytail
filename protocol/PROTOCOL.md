@@ -174,4 +174,20 @@ Frozen on 2026-11-06, before any hardware has been bought and before any measure
 
 Each entry gives the date, the section changed, what changed, why, and whether any data had been seen at the time.
 
-None yet.
+**D1. 2026-11-06, section 10 (MBPTA-CV), added before any hardware data was collected.**
+- *What changed.* The frozen text described a simplified scan: tail sizes from 10 % of the fit set down to 50 on a
+  40-point grid, the largest passing tail chosen, and no check of smaller tails. It is replaced by the rules of the
+  cited paper (Abella et al., ACM TODAES 22(4), 2017, section 5), read in full on this date:
+  - only the upper half of the fit set may be tail;
+  - the exponentiality test (pass if CV ≤ 1 + 1.96 / sqrt(k), so exponential or lighter) must pass for every tail of 10
+    to 49 values, or the method declines;
+  - the chosen tail has k ≥ 50 exceedances, passes the test, and every smaller tail down to 10 passes too;
+  - among such tails, the one whose CV is closest to 1 is chosen;
+  - exponential fit with rate 1 / mean excess above the threshold (unchanged).
+  The paper asks for more runs where we decline, because the protocol's sample size is fixed. The label becomes
+  "MBPTA-CV (re-implemented from the paper; not checked against the authors' code)".
+- *Why.* The frozen rule did not match the method it names, so results reported under the MBPTA-CV label would have
+  been misleading.
+- *Data seen.* Synthetic traces only (`pwcet-synth`); no hardware exists. Effect on the README's synthetic
+  interference trace (seed 1): the chosen tail moved from CV 0.34 at k = 10,000 to CV 1.00 at k = 20,124. The verdict
+  stays `pass-pessimistic`, and the 1e-9 bound rises from 9.5 % to 23 % above the held-out maximum.

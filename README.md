@@ -22,7 +22,7 @@ Early skeleton. **No hardware has been bought and no measurements exist.**
   - `gates`: the protocol's applicability gates (degeneracy, then independence, then stationarity, each test at
     0.05/4) with the verdict labels;
   - `evt`: GPD peaks over threshold, threshold choice, bootstrap Anderson-Darling goodness of fit, pWCET;
-  - `validate`: GEV block maxima, an MBPTA-CV-style exponential baseline, max observed + 20 %, and held-out
+  - `validate`: GEV block maxima, MBPTA-CV (Abella et al. 2017 selection rules, re-implemented from the paper), max observed + 20 %, and held-out
     validation (exact Clopper-Pearson interval, tolerance factor 2, verdicts pass / pass-pessimistic / fail / untestable);
   - `analysis`, `cli`: the end-to-end pipeline and the `pwcet-analyse` / `pwcet-synth` commands.
 - `models/train_ad.py`: trains the MLPerf Tiny anomaly-detection autoencoder (640-128x4-8-128x4-640, Keras), applies
@@ -71,7 +71,7 @@ All numbers below come from host-generated traces (`pwcet-synth`, seeds 1 and 2,
 
 | Trace | Gates | Outcome |
 |---|---|---|
-| interference, random gap (i.i.d. by construction) | pass (runs p=0.70, Ljung-Box p=0.34, KPSS p≥0.10, KS p=0.73) | GPD (q=0.975, shape -0.23, AD p=0.95): 1e-3 bound exceeded 179 times vs 200 expected, 1e-4: 33 vs 20, both `pass`. Bounds at 1e-6 to 1e-9 are refuted (1e-6: 3 held-out runs above, 0.2 expected); the 1e-9 bound, 207,994, is below the held-out maximum, 207,997. GEV (shape -0.26, AD p=0.026, so its fit would be rejected) agrees at 1e-3/1e-4 and is refuted from 1e-5. MBPTA-CV-style (CV 0.34): `pass-pessimistic` (0 exceedances), 1e-9 bound 9.5 % above the held-out max. Max + 20 %: 249,338, never exceeded. |
+| interference, random gap (i.i.d. by construction) | pass (runs p=0.70, Ljung-Box p=0.34, KPSS p≥0.10, KS p=0.73) | GPD (q=0.975, shape -0.23, AD p=0.95): 1e-3 bound exceeded 179 times vs 200 expected, 1e-4: 33 vs 20, both `pass`. Bounds at 1e-6 to 1e-9 are refuted (1e-6: 3 held-out runs above, 0.2 expected); the 1e-9 bound, 207,994, is below the held-out maximum, 207,997. GEV (shape -0.26, AD p=0.026, so its fit would be rejected) agrees at 1e-3/1e-4 and is refuted from 1e-5. MBPTA-CV (paper's rules, protocol deviation D1; tail k = 20,124 with CV 1.00, threshold between the hit and miss modes): `pass-pessimistic` at 1e-3 and 1e-4 (0 exceedances), 1e-9 bound 23 % above the held-out max. On seed 2 the closest-to-1 rule instead picks k = 169 inside the miss mode: `pass` at both levels, 1e-9 bound 0.6 % above the max. Max + 20 %: 249,338, never exceeded. |
 | interference, fixed gap (ISR phase drifts) | refused: `EVT-invalid-dependent` (runs p≈0) | no bound |
 | interference + co-running RTOS task | refused: dependent (runs, Ljung-Box) | no bound |
 | interference, sticky cache misses | refused: dependent (runs, Ljung-Box) | no bound |

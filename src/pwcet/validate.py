@@ -1,7 +1,7 @@
 """Second estimators, baselines and held-out validation of pWCET bounds.
 
 - Block maxima with a GEV fit (the alternative to the GPD peaks-over-threshold fit in evt.py).
-- MBPTA-CV-style exponential-tail baseline (coefficient of variation of excesses).
+- MBPTA-CV exponential-tail baseline (Abella et al. 2017 rules, coefficient of variation of excesses).
 - Maximum observed value plus a fixed margin (industrial-practice baseline).
 - Held-out validation: count how often held-out runs exceed each bound and compare the rate
   with the target exceedance probability using an exact (Clopper-Pearson) binomial interval.
@@ -84,9 +84,9 @@ def gev_pwcet(fit: GevFit, p) -> np.ndarray:
 
 # ---------------------------------------------------------------- MBPTA-CV baseline
 
-CV_MIN_EXCEED = 50
-CV_MAX_FRAC = 0.10
-CV_Z = 1.96
+CV_MIN_TAIL = 10      # Rule 1: tails of fewer than 10 values are not tested
+CV_MIN_EXCEED = 50    # Const1: the fitted tail has at least 50 exceedances
+CV_Z = 1.96           # 95 % band: under exponentiality the residual CV is about N(1, 1/k)
 
 
 @dataclass(frozen=True)
@@ -104,39 +104,72 @@ class CvFit:
         return self.n_exceed / self.n
 
 
-def mbpta_cv(x, min_exceed=CV_MIN_EXCEED, max_frac=CV_MAX_FRAC, z=CV_Z, n_grid=40) -> CvFit:
-    """Simplified re-implementation of the MBPTA-CV idea (Abella et al., ACM TODAES 2017):
-    excesses of an exponential tail have coefficient of variation 1, with approximate
-    standard error 1/sqrt(k) for k excesses. Tail sizes k are scanned from the largest
-    (max_frac * n) down to `min_exceed`; the first tail whose CV is not significantly above 1
-    (CV <= 1 + z / sqrt(k)) is modelled as exponential. A CV below 1 means a lighter tail,
-    for which the exponential bound is pessimistic and therefore accepted. If every tail
-    has CV above the band the tail is heavier than exponential and the method declines.
-    Not checked against the authors' reference implementation."""
+def cv_plot(x):
+    """Empirical residual CV for every tail size k = 1 .. n // 2 (the lower half of the sample
+    is never treated as tail, Rule 4). With values sorted in decreasing order, tail k has
+    threshold th = x_(k+1) and excesses x_(1..k) - th. A tail size is `valid` only if its k
+    values lie strictly above th (no tie across the threshold). Returns (k, threshold, mean
+    excess, cv, valid) as arrays indexed by k - 1."""
+    xs = np.sort(np.asarray(x, float))[::-1]
+    n = xs.size
+    kmax = n // 2
+    z = xs[0] - xs[: kmax + 1]                # >= 0, increasing; excess_i = z[k] - z[i]
+    c1 = np.cumsum(z[:kmax])
+    c2 = np.cumsum(z[:kmax] ** 2)
+    k = np.arange(1, kmax + 1, dtype=float)
+    th = xs[1: kmax + 1]
+    mean = z[1: kmax + 1] - c1 / k
+    with np.errstate(divide="ignore", invalid="ignore"):
+        var = np.maximum(c2 - c1 ** 2 / k, 0.0) / (k - 1)
+        cv = np.sqrt(var) / mean
+    valid = xs[:kmax] > th                    # x_(k) > x_(k+1)
+    valid &= mean > 0
+    return k.astype(int), th, mean, cv, valid
+
+
+def mbpta_cv(x, min_tail=CV_MIN_TAIL, min_exceed=CV_MIN_EXCEED, z=CV_Z) -> CvFit:
+    """MBPTA-CV following Abella et al., ACM TODAES 22(4) 2017, section 5 (re-implemented from
+    the paper, not from the authors' code):
+
+    - the exponentiality test for a tail of k exceedances passes if cv <= 1 + z / sqrt(k):
+      exponential (inside the 95 % band) or light (below it), the latter being upper-bounded
+      by an exponential and therefore accepted (Rule 5);
+    - Rule 1/2: the test must pass for every tail of 10 to 49 values, otherwise the method
+      declines (the paper asks for more runs; with the protocol's fixed sample size it
+      declines);
+    - Const1/Const2/Rule 3: the chosen tail has k >= 50 and the test passes for it and for
+      every smaller tail down to 10; among those the k whose cv is closest to 1 is chosen;
+    - Rule 4: at most half of the sample is tail;
+    - section 5.3: exponential fit with rate 1 / mean excess, shifted by the threshold.
+    The band 1 +- z / sqrt(k) is the asymptotic normal band for the residual CV of an
+    exponential sample (the paper cites del Castillo et al. 2014 without printing it).
+    Tail sizes whose threshold value is tied with a tail value are skipped."""
     x = np.asarray(x, float)
     n = x.size
-    xs = np.sort(x)[::-1]
-    k_max = int(max_frac * n)
-    if k_max < min_exceed:
+    if n // 2 < min_exceed:
         return CvFit(False, float("nan"), float("nan"), 0, n, float("nan"), "trace too short")
-    ks = np.unique(np.geomspace(min_exceed, k_max, n_grid).astype(int))[::-1]
-    last = None
-    for k in ks:
-        u = xs[k]
-        exc = x[x > u] - u
-        if exc.size < min_exceed:
-            continue
-        mean = float(exc.mean())
-        cv = float(exc.std(ddof=1) / mean)
-        last = (u, cv, exc.size, mean)
-        if cv <= 1 + z / np.sqrt(exc.size):
-            return CvFit(True, float(u), cv, int(exc.size), n, mean)
-    if last is None:
-        return CvFit(False, float("nan"), float("nan"), 0, n, float("nan"),
-                     "too many ties: no tail with enough strict exceedances")
-    u, cv, k, mean = last
-    return CvFit(False, float(u), cv, int(k), n, mean,
-                 "CV above the exponential band at every tail size (heavier than exponential)")
+    k, th, mean, cv, valid = cv_plot(x)
+    passed = cv <= 1 + z / np.sqrt(k)
+    small = valid & (k >= min_tail) & (k < min_exceed)
+    if np.any(small & ~passed):
+        k_bad = int(k[small & ~passed][0])
+        return CvFit(False, float(th[k_bad - 1]), float(cv[k_bad - 1]), k_bad, n,
+                     float(mean[k_bad - 1]),
+                     f"exponentiality rejected for the {k_bad} largest values "
+                     "(heavier than exponential among the 10-49 largest)")
+    big = valid & (k >= min_exceed)
+    fails = np.flatnonzero(big & ~passed)
+    stop = int(k[fails[0]]) if fails.size else int(k[-1]) + 1
+    elig = np.flatnonzero(big & (k < stop))
+    if elig.size == 0:
+        if not np.any(big):
+            return CvFit(False, float("nan"), float("nan"), 0, n, float("nan"),
+                         "too many ties: no tail of >= 50 values strictly above its threshold")
+        i = fails[0]
+        return CvFit(False, float(th[i]), float(cv[i]), int(k[i]), n, float(mean[i]),
+                     "exponentiality rejected at the smallest admissible tail (k >= 50)")
+    i = elig[np.argmin(np.abs(cv[elig] - 1.0))]
+    return CvFit(True, float(th[i]), float(cv[i]), int(k[i]), n, float(mean[i]))
 
 
 def cv_pwcet(fit: CvFit, p) -> np.ndarray:

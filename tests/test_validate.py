@@ -107,11 +107,51 @@ def test_gev_recovers_exponential_tail():
 
 # ------------------------------------------------------------- MBPTA-CV and HWM
 
+def test_cv_plot_matches_brute_force_with_ties():
+    rng = np.random.default_rng(7)
+    x = np.round(rng.exponential(5.0, 400))  # integer values: many ties
+    k, th, mean, cv, valid = v.cv_plot(x)
+    assert k[-1] == 200  # never more than half of the sample (Rule 4)
+    for kk in (3, 10, 57, 200):
+        u = np.sort(x)[::-1][kk]
+        exc = x[x > u] - u
+        if valid[kk - 1]:
+            assert exc.size == kk
+            assert mean[kk - 1] == pytest.approx(exc.mean())
+            assert cv[kk - 1] == pytest.approx(exc.std(ddof=1) / exc.mean())
+        else:  # tie across the threshold: fewer than kk strict exceedances
+            assert exc.size < kk
+    assert not valid.all() and valid.any()
+
+
 def test_mbpta_cv_exponential_tail_matches_truth():
     x = syn.iid_gpd(100_000, shape=0.0, seed=40)
     f = v.mbpta_cv(x)
     assert f.applicable and abs(f.cv - 1) < 0.05
+    assert v.CV_MIN_EXCEED <= f.n_exceed <= x.size // 2
     assert v.cv_pwcet(f, 1e-6) == pytest.approx(syn.true_quantile(1e-6), rel=0.05)
+
+
+def test_mbpta_cv_follows_the_paper_selection_rules():
+    x = syn.iid_gpd(100_000, shape=0.0, seed=44)
+    f = v.mbpta_cv(x)
+    k, th, mean, cv, valid = v.cv_plot(x)
+    band = 1 + v.CV_Z / np.sqrt(k)
+    upto = valid & (k >= v.CV_MIN_TAIL) & (k <= f.n_exceed)
+    assert np.all(cv[upto] <= band[upto])  # Const2: every smaller tail down to 10 passes
+    elig = valid & (k >= v.CV_MIN_EXCEED) & (k <= f.n_exceed)
+    assert abs(f.cv - 1) == pytest.approx(np.min(np.abs(cv[elig] - 1)))  # Rule 3: closest to 1
+    assert f.threshold == th[f.n_exceed - 1]
+
+
+def test_mbpta_cv_declines_when_the_top_values_look_heavy():
+    """Rule 2: a rejection anywhere among the 10-49 largest values means no estimate."""
+    x = np.concatenate([syn.iid_gpd(20_000, shape=0.0, seed=45), [1e5, 2e5, 4e5]])
+    f = v.mbpta_cv(x)
+    assert not f.applicable and f.n_exceed < v.CV_MIN_EXCEED
+    assert "10-49 largest" in f.reason
+    with pytest.raises(ValueError):
+        v.cv_pwcet(f, 1e-6)
 
 
 def test_mbpta_cv_heavy_tails_declined_or_optimistic_and_light_tail_pessimistic():
@@ -119,14 +159,19 @@ def test_mbpta_cv_heavy_tails_declined_or_optimistic_and_light_tail_pessimistic(
     assert not very_heavy.applicable and very_heavy.cv > 1
     with pytest.raises(ValueError):
         v.cv_pwcet(very_heavy, 1e-6)
-    # Known weakness, kept visible: at the smallest tail (50 excesses) the CV band is wide
-    # (<= 1.28), so a shape-0.3 tail is accepted as exponential and the bound is optimistic.
+    # Known weakness of the method, kept visible: the 95 % band at small k is wide
+    # (1.28 at k = 50), so a shape-0.3 tail is often accepted and its bound is optimistic.
     heavy = v.mbpta_cv(syn.iid_gpd(100_000, shape=0.3, seed=41))
-    assert heavy.applicable and heavy.n_exceed == v.CV_MIN_EXCEED
+    assert heavy.applicable and heavy.n_exceed < 100
     assert v.cv_pwcet(heavy, 1e-6) < syn.true_quantile(1e-6, shape=0.3)
     light = v.mbpta_cv(syn.iid_gpd(100_000, shape=-0.2, seed=42))
     assert light.applicable and light.cv < 1
     assert v.cv_pwcet(light, 1e-6) > syn.true_quantile(1e-6, shape=-0.2)
+
+
+def test_mbpta_cv_short_or_constant_trace():
+    assert v.mbpta_cv(np.arange(60.0)).reason == "trace too short"
+    assert not v.mbpta_cv(np.full(1000, 7.0)).applicable
 
 
 def test_max_plus_margin():
