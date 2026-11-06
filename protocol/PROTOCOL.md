@@ -191,3 +191,24 @@ Each entry gives the date, the section changed, what changed, why, and whether a
 - *Data seen.* Synthetic traces only (`pwcet-synth`); no hardware exists. Effect on the README's synthetic
   interference trace (seed 1): the chosen tail moved from CV 0.34 at k = 10,000 to CV 1.00 at k = 20,124. The verdict
   stays `pass-pessimistic`, and the 1e-9 bound rises from 9.5 % to 23 % above the held-out maximum.
+
+**D2. 2026-11-06, section 10 (new baseline), added before any hardware data was collected.**
+- *What changed.* A third baseline is added: inequality bounds that need no tail model. Two variants are reported,
+  both re-implemented from the papers and not checked against any authors' code:
+  - MEMIK (Vilardell et al., ECRTS 2022): P(X ≥ b) ≤ E[X^k] / b^k, minimised over k = 1..maxk (k ≤ 150);
+  - ATAN (Toba, Yano and Azumi, arXiv 2511.11682): f(x) = arctan(x / d)^k, minimised over d = median × {0.5, 1, 2,
+    4, 8, 16, 32, 64} and k = 1..maxk. The paper gives no grid, so this grid is ours.
+  - maxk comes from RESTK (Vilardell et al., Algorithm 2): 100 bootstrap simulations of size n / 1000 at the test
+    probabilities 10^-(e-1), 10^-(e-2), 10^-(e-3) with e = floor(log10 n), and a line in log10 p through the three caps.
+    The method declines if |r| < 0.95 (a flat line, all three caps equal, is accepted) or if n < 10,000.
+  - Like the other baselines, it is computed only on fit sets that pass the gates, and it is validated held out with the
+    same rule (section 9). Bounds use the raw cycle counts, with no finite-sample correction (neither paper has one).
+- *Why.* The literature check (`docs/scoop_check.md`) found these methods to be the main tail-model-free alternative
+  to EVT and MBPTA-CV. A head-to-head on the same traces is part of what this study can add.
+- *Data seen.* Synthetic traces only (`pwcet-synth`); no hardware exists. On the README's interference traces (seeds 1
+  and 2), RESTK gives maxk = 150 at all three test probabilities, so the k cap binds. ATAN then picks the largest d
+  and matches MEMIK to within 0.003 %.
+- *Reference code.* The RESTK R package (pWCET-AI bundle, Zenodo record 17366181) was read but not run. It differs from
+  the paper in choices the paper leaves open (k cap 120, continuous k, bootstrap-averaged reference quantiles, no
+  correlation check). This implementation follows the paper; the differences are listed in `docs/scoop_check.md`
+  section 7.

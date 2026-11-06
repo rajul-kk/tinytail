@@ -1,5 +1,6 @@
 """End-to-end analysis of one trace, following protocol/PROTOCOL.md:
-load -> gates -> (only if the gates pass) GPD / GEV / MBPTA-CV fits -> held-out validation.
+load -> gates -> (only if the gates pass) GPD / GEV / MBPTA-CV / inequality (MEMIK, ATAN)
+bounds -> held-out validation.
 
 The result is a plain dict ready for JSON. Defaults equal the frozen protocol values.
 """
@@ -11,6 +12,7 @@ from . import __version__
 from .evt import fit_pot, pwcet
 from .gates import run_gates, GATE_ALPHA, VALID, INVALID_POOR_FIT
 from . import validate as v
+from . import inequality as iq
 
 TARGET_PS = (1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9)
 TESTABLE_PS = (1e-3, 1e-4)
@@ -193,7 +195,7 @@ def analyse(fit_x, hold_x, cfg: Config | None = None, origin="synthetic", meta=N
         gev = {"error": str(e)}
     report["estimates"]["gev"] = gev
 
-    # MBPTA-CV-style baseline
+    # MBPTA-CV baseline (PROTOCOL.md section 10 and deviation D1)
     c = v.mbpta_cv(fit_x)
     cv = {"applicable": c.applicable, "cv": c.cv, "threshold": c.threshold,
           "n_exceed": c.n_exceed, "mean_excess": c.mean_excess, "reason": c.reason}
@@ -203,6 +205,20 @@ def analyse(fit_x, hold_x, cfg: Config | None = None, origin="synthetic", meta=N
         cv["pessimism_" + _pkey(min(ps))] = cb[min(ps)] / hold_max
         report["validation"]["mbpta_cv"] = _validation(cb, hold_x, cfg)
     report["estimates"]["mbpta_cv"] = cv
+
+    # Inequality baselines (PROTOCOL.md deviation D2): MEMIK and ATAN, k capped by RESTK
+    for m in iq.METHODS:
+        f = iq.fit_inequality(fit_x, m, seed=cfg.seed)
+        est = {"applicable": f.applicable, "restk_ps": list(f.restk_ps),
+               "restk_maxk": list(f.restk_maxk), "restk_corr": f.restk_corr,
+               "reason": f.reason}
+        if f.applicable:
+            ib = {p: float(iq.inequality_pwcet(f, p)) for p in ps}
+            est["maxk"] = {_pkey(p): f.maxk(p) for p in ps}
+            est["pwcet"] = {_pkey(p): b for p, b in ib.items()}
+            est["pessimism_" + _pkey(min(ps))] = ib[min(ps)] / hold_max
+            report["validation"][m] = _validation(ib, hold_x, cfg)
+        report["estimates"][m] = est
 
     report["primary_outcome"] = primary_outcome(report)
     report["extrapolation_refuted"] = {

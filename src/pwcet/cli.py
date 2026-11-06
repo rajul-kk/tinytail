@@ -36,9 +36,14 @@ def summary(r: dict) -> str:
             why = est.get("reason") or est.get("error") or "no threshold passed goodness of fit"
             lines.append(f"{name}: no bound ({why})")
             continue
-        extra = (f" q={est['chosen_quantile']} shape={est['shape']:.3f} gof p={est['gof_pvalue']:.3f}"
-                 if name == "gpd" else f" shape={est['shape']:.3f} gof p={est['gof_pvalue']:.3f}"
-                 if name == "gev" else f" cv={est['cv']:.3f} k={est['n_exceed']}")
+        if name == "gpd":
+            extra = f" q={est['chosen_quantile']} shape={est['shape']:.3f} gof p={est['gof_pvalue']:.3f}"
+        elif name == "gev":
+            extra = f" shape={est['shape']:.3f} gof p={est['gof_pvalue']:.3f}"
+        elif name == "mbpta_cv":
+            extra = f" cv={est['cv']:.3f} k={est['n_exceed']}"
+        else:
+            extra = f" RESTK maxk={est['restk_maxk']} at p={est['restk_ps']}"
         lines.append(f"{name}:{extra}")
         for c in r["validation"].get(name, []):
             lines.append(f"  p={c['p']:.0e} bound={_fmt(c['bound'])} holdout {c['exceed']}/{c['n']} "

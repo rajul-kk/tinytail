@@ -49,7 +49,10 @@ def test_cli_end_to_end_valid_trace(tmp_path, capsys):
     r = json.loads(out.read_text())
     assert r["origin"] == "synthetic" and r["gates"]["passed"]
     assert r["verdict"] == "EVT-valid"
-    assert set(r["estimates"]) == {"gpd", "gev", "mbpta_cv"}
+    assert set(r["estimates"]) == {"gpd", "gev", "mbpta_cv", "memik", "atan"}
+    for m in ("memik", "atan"):  # inequality baselines: either a bound or a stated reason
+        e = r["estimates"][m]
+        assert ("pwcet" in e) == e["applicable"] and (e["applicable"] or e["reason"])
     v = {c["p"]: c["verdict"] for c in r["validation"]["gpd"]}
     assert v[1e-3] in ("pass", "pass-pessimistic") and v[1e-9] == "untestable"
     assert r["primary_outcome"].startswith("validated")
