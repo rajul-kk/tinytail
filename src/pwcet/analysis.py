@@ -13,6 +13,7 @@ from .evt import fit_pot, pwcet
 from .gates import run_gates, GATE_ALPHA, VALID, INVALID_POOR_FIT
 from . import validate as v
 from . import inequality as iq
+from . import tracelog
 
 TARGET_PS = (1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9)
 TESTABLE_PS = (1e-3, 1e-4)
@@ -46,6 +47,8 @@ class Trace:
     n_wrap_excluded: int = 0
     n_seq_missing: int = 0
     header: list = field(default_factory=list)
+    overhead: np.ndarray = field(default_factory=lambda: np.empty(0))  # empty-region cycles
+    bad_frames: int = 0  # binary format: corrupt or truncated frames skipped
 
 
 def _pkey(p) -> str:
@@ -56,8 +59,10 @@ def _pkey(p) -> str:
 
 def parse_trace(text: str) -> Trace:
     """Accepts the firmware serial format `T,<seq>,<cycles>,<input_id>,<flags>` (flags in hex,
-    bit 0 = timer wrap: such rows are excluded and counted), or a CSV with a `cycles` column,
-    or a single column of numbers. Lines starting with '#' are header lines."""
+    bit 0 = timer wrap: such rows are excluded and counted; input_id 255 = counter-read
+    overhead rows, kept apart), or a CSV with a `cycles` column, or a single column of
+    numbers. Lines starting with '#' are header lines. Binary firmware logs go through
+    `parse_bytes`."""
     header, serial, plain = [], [], []
     for line in io.StringIO(text):
         s = line.strip()
@@ -70,13 +75,11 @@ def parse_trace(text: str) -> Trace:
         else:
             plain.append(s)
     if serial:
-        seq = np.array([int(r[1]) for r in serial])
-        cyc = np.array([float(r[2]) for r in serial])
-        flags = np.array([int(r[4], 16) if len(r) > 4 else 0 for r in serial])
-        wrap = (flags & 1).astype(bool)
-        span = int(seq.max() - seq.min() + 1)
-        return Trace(cyc[~wrap], len(serial), int(wrap.sum()),
-                     span - int(np.unique(seq).size), header)
+        seq = [int(r[1]) for r in serial]
+        cyc = [float(r[2]) for r in serial]
+        ids = [int(r[3]) if len(r) > 3 else 0 for r in serial]
+        flags = [int(r[4], 16) if len(r) > 4 else 0 for r in serial]
+        return _from_rows(tracelog.split_rows(seq, cyc, ids, flags), header)
     rows = list(csv.reader(plain))
     if not rows:
         raise ValueError("no data rows")
@@ -91,9 +94,24 @@ def parse_trace(text: str) -> Trace:
     return Trace(cyc, len(rows), 0, 0, header)
 
 
+def _from_rows(r: dict, header, bad_frames=0) -> Trace:
+    return Trace(r["cycles"], r["n_rows"], r["n_wrap_excluded"], r["n_seq_missing"], header,
+                 r["overhead"], bad_frames)
+
+
+def parse_bytes(data: bytes) -> Trace:
+    """Binary firmware log (`#BIN1` marker) or any text format accepted by parse_trace."""
+    if tracelog.is_binary(data):
+        header, rows, bad = tracelog.decode_binary(data)
+        if rows.shape[0] == 0:
+            raise ValueError("binary trace without valid frames")
+        return _from_rows(tracelog.split_rows(*rows.T), header, bad)
+    return parse_trace(data.decode("utf-8"))
+
+
 def load_trace(path) -> Trace:
-    with open(path, encoding="utf-8") as f:
-        return parse_trace(f.read())
+    with open(path, "rb") as f:
+        return parse_bytes(f.read())
 
 
 def measurement_failures(t: Trace) -> list:

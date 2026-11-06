@@ -56,9 +56,17 @@ def summary(r: dict) -> str:
     return "\n".join(lines)
 
 
+def _overhead(x):
+    """Counter-read overhead (empty timed regions): reported, never subtracted."""
+    if x.size == 0:
+        return None
+    return {"n": int(x.size), "min": float(x.min()), "median": float(np.median(x)),
+            "max": float(x.max())}
+
+
 def main_analyse(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="pwcet-analyse", description=__doc__.split("\n")[2])
-    ap.add_argument("trace", help="fit-set trace (serial format or CSV)")
+    ap.add_argument("trace", help="fit-set trace (firmware CSV or binary log, or plain CSV)")
     ap.add_argument("--holdout", nargs="+", help="held-out session files (default: split the trace)")
     ap.add_argument("--origin", required=True, choices=an.ORIGINS)
     ap.add_argument("--out", help="JSON report path (default: <trace>.report.json)")
@@ -79,7 +87,9 @@ def main_analyse(argv=None) -> int:
     out = a.out or a.trace + ".report.json"
     meta = {"trace": a.trace, "holdout": a.holdout or [], "header": fit_t.header,
             "rows": fit_t.n_rows, "wrap_excluded": fit_t.n_wrap_excluded,
-            "seq_missing": fit_t.n_seq_missing, "run_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+            "seq_missing": fit_t.n_seq_missing, "bad_frames": fit_t.bad_frames,
+            "counter_overhead": _overhead(fit_t.overhead),
+            "run_at": time.strftime("%Y-%m-%dT%H:%M:%S")}
 
     if a.origin == "hardware":
         bad = {a.trace: an.measurement_failures(fit_t)}

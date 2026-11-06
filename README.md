@@ -31,9 +31,14 @@ Early skeleton. **No hardware has been bought and no measurements exist.**
   full-integer int8 post-training quantisation and exports `ad_int8.tflite` plus `model_data.c/.h` for TFLite Micro
   with CMSIS-NN. Checked against the `mlcommons/tiny` reference code (crop to frames 50-249, int8 calibration on every
   5th training vector; `docs/scoop_check.md` section 5). Run so far **only on random features**.
-- `firmware/`: empty.
+- `firmware/`: **untested skeleton** (see `firmware/README.md`): a cycle-timing harness for the STM32F446
+  (`DWT->CYCCNT`) and the RP2040 (SysTick), periodic-ISR, DMA and FreeRTOS interference generators, and a CSV or
+  13-byte binary UART log. No ARM toolchain is installed, so it has never been cross-compiled or run on a board; only
+  the board-independent part is built and run on the host against a fake board. The workload is a placeholder int8
+  FC stack, not TFLM.
+- `src/pwcet/tracelog.py`: reader for the binary log (resync on corrupt frames, counted) and the overhead rows.
 
-Not done: firmware, Renode, any hardware measurement.
+Not done: TFLM/CMSIS-NN integration, any cross-compiled or on-board firmware run, Renode, any hardware measurement.
 
 ## Related work (details and read levels in `docs/scoop_check.md`)
 
@@ -64,7 +69,8 @@ Not done: firmware, Renode, any hardware measurement.
     pwcet-analyse intf.csv --origin synthetic                         # writes intf.csv.report.json
     pwcet-analyse s1.csv --holdout s2.csv s3.csv --origin hardware    # protocol layout (later)
 
-Input: the firmware serial format `T,<seq>,<cycles>,<input_id>,<flags>` (timer-wrap rows dropped and counted), a CSV
+Input: the firmware log, CSV `T,<seq>,<cycles>,<input_id>,<flags>` or binary (timer-wrap rows dropped and counted;
+`input_id` 255 rows are counter-overhead measurements, reported apart), a CSV
 with a `cycles` column, or one number per line. Without `--holdout` the first third is fitted and the rest held out.
 The gates run on the fit set; on any gate failure no EVT or MBPTA bound is computed. Defaults are the protocol's
 (B = 1000 bootstrap replicates for GPD, 500 for GEV): about 4 minutes for 300,000 runs on the development laptop.

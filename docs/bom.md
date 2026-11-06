@@ -62,3 +62,8 @@ a multimeter before trusting absolute numbers.
 
 No oscilloscope, no debug probe (ST-LINK on the Nucleo can flash it; the Pico can be flashed over USB BOOTSEL; a second Pico as a
 picoprobe is optional and costs about USD 4).
+
+Correction (2026-11-06, while writing firmware/): the RP2040 harness logs over UART0, not USB CDC, because USB stdio
+needs a 1 ms service interrupt that would be interference in S0. Reading that UART needs a 3.3 V USB-UART adapter
+or a second Pico running picoprobe (about USD 4), so one of the two is **required**. The Nucleo needs nothing extra:
+USART2 goes through the ST-LINK virtual COM port.

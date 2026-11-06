@@ -149,6 +149,8 @@ Renode (open source, Antmicro) models the instruction set functionally and runs 
 
 ## 10. State at this commit
 
-Done on the host: the statistical pipeline (gates, GPD, GEV, MBPTA-CV-style baseline, held-out validation, analysis CLI) with tests
+Done on the host: the statistical pipeline (gates, GPD, GEV, MBPTA-CV and MEMIK/ATAN baselines, held-out validation, analysis CLI) with tests
 on synthetic traces, the pre-registered protocol, and the training/int8-export script (run only on random features). Not done:
-firmware (the `firmware/` folder is empty), Renode runs, any hardware measurement, any energy measurement, any real-dataset accuracy.
+firmware on any board (`firmware/` holds an untested skeleton: timing harness, interference generators and log format,
+built only for the host with a fake board; no ARM toolchain installed; the workload is a placeholder FC stack, and
+`ref_infer.c` above is not written), Renode runs, any hardware measurement, any energy measurement, any real-dataset accuracy.
