@@ -24,6 +24,9 @@ Early skeleton. **No hardware has been bought and no measurements exist.**
   - `validate`: GEV block maxima, an MBPTA-CV-style exponential baseline, max observed + 20 %, and held-out
     validation (exact Clopper-Pearson interval, tolerance factor 2, verdicts pass / pass-pessimistic / fail / untestable);
   - `analysis`, `cli`: the end-to-end pipeline and the `pwcet-analyse` / `pwcet-synth` commands.
+- `models/train_ad.py`: trains the MLPerf Tiny anomaly-detection autoencoder (640-128x4-8-128x4-640, Keras), applies
+  full-integer int8 post-training quantisation and exports `ad_int8.tflite` plus `model_data.c/.h` for TFLite Micro
+  with CMSIS-NN. Run so far **only on random features**.
 - `firmware/`: empty.
 
 Not done: firmware, Renode, any hardware measurement.
@@ -58,6 +61,17 @@ Reading: the negative-shape GPD fits the observed body of a bounded-looking tail
 Gaussian jitter, so the true tail is unbounded and the extrapolations are optimistic. This is the H5 risk in
 `docs/design.md`, and the held-out check catches it only down to about 1e-6. The gates do not see changes after the
 fit window; the held-out sessions are what catches those.
+
+## Model
+
+    python models/train_ad.py --synthetic 20000 --epochs 5 --out out/ad          # pipeline check, no accuracy meaning
+    python models/train_ad.py --data <DCASE2020>/dev_data/ToyCar --out out/ad     # real data (not downloaded here)
+
+TensorFlow 2.21 (CPU) was already installed, so Keras and the TFLite converter are used directly. Nothing is downloaded.
+With `--data`, `test/*.wav` clips give a clip-level ROC AUC for the float and the int8 model. Measured on random
+features (20,000 vectors, 5 epochs, 34 s on the laptop CPU): 269,992 parameters, a 318,616-byte int8 flatbuffer whose
+graph has only `FULLY_CONNECTED` ops with int8 input and output, and int8-vs-float per-vector reconstruction error
+correlation 0.998. No accuracy or AUC has been measured; that needs the DCASE 2020 data.
 
 ## Test
 
