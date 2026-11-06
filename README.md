@@ -11,12 +11,12 @@ Early skeleton. **No hardware has been bought and no measurements exist.**
 - `docs/scoop_check.md`: literature check (abstract/README/snippet level only; verdict partly open, unverified).
 - `docs/bom.md`: bill of materials (about USD 38, unverified prices, nothing purchased).
 - `docs/design.md`: toolchain, model, measurement and statistics plan with rejected alternatives and risks.
-- `src/pwcet/`: placeholder modules only (statistics pipeline not yet implemented).
+- `src/pwcet/`: host-side stats on synthetic traces (`synthetic`, `iid`, `stationarity`, `evt`); `validate.py` is a placeholder. No GEV/block-maxima yet.
 - `firmware/`: empty.
 
-Not done: protocol pre-registration, stats pipeline, model training, firmware, Renode.
+Not done: protocol pre-registration, held-out validation, GEV, model training, firmware, Renode.
 
 ## Test
 
     pip install -e .[dev]
-    pytest
+    python -m pytest -q      # about 1-2 minutes (bootstrap goodness-of-fit tests)
