@@ -1,6 +1,7 @@
 """Peaks-over-threshold EVT: GPD fit, threshold choice, goodness of fit, pWCET.
 
-TODO (not implemented): block maxima / GEV estimator, declustering, bootstrap CIs on pWCET.
+The block-maxima / GEV estimator lives in validate.py (fit_gev, gev_pwcet).
+Not implemented: declustering, bootstrap CIs on pWCET.
 """
 from dataclasses import dataclass
 import numpy as np
@@ -29,7 +30,12 @@ def is_degenerate(x, min_distinct=20) -> bool:
 
 def ad_statistic(exc, shape, scale) -> float:
     """Anderson-Darling A^2 of excesses against GPD(shape, scale)."""
-    z = np.sort(genpareto.cdf(exc, shape, scale=scale))
+    return ad_from_cdf(genpareto.cdf(exc, shape, scale=scale))
+
+
+def ad_from_cdf(u) -> float:
+    """Anderson-Darling A^2 from fitted-CDF values u = F(x_i) (any fitted family)."""
+    z = np.sort(np.asarray(u, float))
     z = np.clip(z, 1e-12, 1 - 1e-12)
     n = z.size
     i = np.arange(1, n + 1)

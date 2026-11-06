@@ -43,3 +43,13 @@ def periodic_spikes(n, period=50, height=200.0, base=1000.0, sigma=5.0, seed=0):
     x = base + np.random.default_rng(seed).normal(0.0, sigma, n)
     x[::period] += height
     return x
+
+
+def mode_switching(n, p_switch=0.01, delta=40.0, base=1000.0, sigma=5.0, seed=0):
+    """Two latency modes (e.g. cache-warm / cache-cold phases) that persist for about
+    1/p_switch runs before flipping: a sticky Markov chain. Marginally bimodal and
+    stationary in the long run, but strongly serially dependent, so EVT must be refused."""
+    rng = np.random.default_rng(seed)
+    flips = rng.random(n) < p_switch
+    mode = np.cumsum(flips) % 2
+    return base + delta * mode + rng.normal(0.0, sigma, n)
