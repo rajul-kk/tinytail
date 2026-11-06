@@ -8,7 +8,8 @@ RTOS interference as the independent variable?
 
 Early skeleton. **No hardware has been bought and no measurements exist.**
 
-- `docs/scoop_check.md`: literature check (abstract/README/snippet level only; verdict partly open, unverified).
+- `docs/scoop_check.md`: literature check, each source tagged with its read level (full text for the closest works,
+  snippets for the venue search); verdict and the MLPerf Tiny reference check. See "Related work" below.
 - `docs/bom.md`: bill of materials (about USD 38, unverified prices, nothing purchased).
 - `docs/design.md`: toolchain, model, measurement and statistics plan with rejected alternatives and risks.
 - `protocol/PROTOCOL.md`: pre-registered analysis protocol (gates and thresholds, sample sizes, target probabilities,
@@ -30,6 +31,25 @@ Early skeleton. **No hardware has been bought and no measurements exist.**
 - `firmware/`: empty.
 
 Not done: firmware, Renode, any hardware measurement.
+
+## Related work (details and read levels in `docs/scoop_check.md`)
+
+- **Tail latency of edge inference.** arXiv 2606.16106 (Jetson Orin Nano: MobileNetV2, ViT-S, Qwen2.5-1.5B) fits a GPD
+  above p99 as "a marginal quantile heuristic", without formal i.i.d. tests (burst continuation probability 0.74). It
+  sweeps a memory-streaming adversary over 0/2/4 cores and validates on a temporal holdout (p99.9 within ±2.7 %,
+  p99.99 within ±5.7 %). So holdout validation and an interference sweep are already published.
+- **EVT for ML timing.** Tizpaz-Niari and Sankaranarayanan (arXiv 2404.07170, CAIN 2024) apply GPD peaks over threshold to
+  training convergence time and DNN-controller settling time on an Intel server, without i.i.d. tests.
+- **MBPTA practice.** MBPTA-CV (Abella et al., TODAES 2017) is our exponential-tail baseline. Lima, Dias and Barros
+  (ECRTS 2016) and Lima and Bate (RTAS 2017) question when EVT applies. TailID (Manau et al., ECRTS 2025) adds tail tests
+  and reports 2,751 of 2,790 GPU-SoC workloads rejected by standard i.i.d. tests. Refusing to fit is therefore
+  established practice, not our contribution.
+- **Inequality bounds.** MEMIK/RESTK (Vilardell et al., ECRTS 2022) and its saturating-function generalisation
+  (Toba, Yano and Azumi, arXiv 2511.11682) bound P(X ≥ b) by E[f(X)] / f(b) without a tail model.
+- **Gap this repository targets.** No EVT, MBPTA or inequality pWCET study of int8 TinyML inference on Cortex-M was
+  found (search not systematic). This repository contributes the MCU platform (cacheless M0+ vs flash-cached M4),
+  pre-registered gates, held-out tests at fixed target probabilities across power cycles, and a head-to-head of EVT,
+  MBPTA-CV and inequality bounds on the same traces.
 
 ## Analyse a trace
 
