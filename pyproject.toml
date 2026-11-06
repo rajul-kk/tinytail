@@ -10,6 +10,10 @@ requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = ["numpy", "scipy", "statsmodels"]
 
+[project.scripts]
+pwcet-analyse = "pwcet.cli:main_analyse"
+pwcet-synth = "pwcet.cli:main_synth"
+
 [project.optional-dependencies]
 dev = ["pytest"]
 
