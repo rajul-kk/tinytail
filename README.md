@@ -42,9 +42,13 @@ Not done: firmware, Renode, any hardware measurement.
 - **EVT for ML timing.** Tizpaz-Niari and Sankaranarayanan (arXiv 2404.07170, CAIN 2024) apply GPD peaks over threshold to
   training convergence time and DNN-controller settling time on an Intel server, without i.i.d. tests.
 - **MBPTA practice.** MBPTA-CV (Abella et al., TODAES 2017) is our exponential-tail baseline. Lima, Dias and Barros
-  (ECRTS 2016) and Lima and Bate (RTAS 2017) question when EVT applies. TailID (Manau et al., ECRTS 2025) adds tail tests
-  and reports 2,751 of 2,790 GPU-SoC workloads rejected by standard i.i.d. tests. Refusing to fit is therefore
-  established practice, not our contribution.
+  (ECRTS 2016) and Lima and Bate (RTAS 2017) question when EVT applies. TailID (Manau et al., ECRTS 2025) adds tail tests;
+  on the Cortex-A78AE cores of a Jetson AGX Orin only 39 of 2,790 AI-kernel workloads passed every test. Refusing to
+  fit is therefore established practice, not our contribution. Benatti, Reghenzani and Zaccaria (ECRTS 2026) run MBPTA
+  in Renode on a simulated RISC-V SoC and show that unrepresentative inputs can break a pWCET, a threat to our
+  validity too.
+- **Static WCET of networks.** ACETONE (ECRTS 2022) generates C from Keras feed-forward networks for OTAWA analysis on
+  a single-core ARM target: the static counterpart to this measurement study.
 - **Inequality bounds.** MEMIK/RESTK (Vilardell et al., ECRTS 2022) and its saturating-function generalisation
   (Toba, Yano and Azumi, arXiv 2511.11682) bound P(X ≥ b) by E[f(X)] / f(b) without a tail model.
 - **Gap this repository targets.** No EVT, MBPTA or inequality pWCET study of int8 TinyML inference on Cortex-M was
