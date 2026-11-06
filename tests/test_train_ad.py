@@ -25,17 +25,41 @@ def test_log_mel_tone_peaks_in_matching_band_and_vector_shape():
     assert np.array_equal(v[0, 128:256], lm[1].astype(np.float32))
 
 
-def test_wav_loading_int16_and_resampling(tmp_path):
+def test_wav_loading_int16_resampling_and_reference_crop(tmp_path):
     from scipy.io import wavfile
-    t = np.arange(32_000) / 32_000  # 1 s at 32 kHz, resampled to 16 kHz
+    t = np.arange(10 * 32_000) / 32_000  # 10 s at 32 kHz (ToyCar clip length), resampled to 16 kHz
     y = (0.3 * np.sin(2 * np.pi * 440 * t) * 32767).astype(np.int16)
-    wavfile.write(tmp_path / "normal_id_00_00000000.wav", 32_000, y)
-    v = ta.wav_vectors(str(tmp_path / "normal_id_00_00000000.wav"))
-    assert v.shape == (1 + ta.SR // ta.HOP - 4, 640) and np.isfinite(v).all()
-    x = ta.load_dir([str(tmp_path / "normal_id_00_00000000.wav")] * 3, vectors_per_file=10)
+    f = str(tmp_path / "normal_id_00_00000000.wav")
+    wavfile.write(f, 32_000, y)
+    n_frames = 1 + 10 * ta.SR // ta.HOP  # 313
+    # reference keeps frames 50..249 only: 200 frames -> 196 vectors per 10 s clip
+    v = ta.wav_vectors(f)
+    assert ta.CROP == (50, 250) and v.shape == (196, 640) and np.isfinite(v).all()
+    full = ta.wav_vectors(f, crop=None)
+    assert full.shape == (n_frames - 4, 640)
+    assert np.array_equal(v[0], full[50])
+    x = ta.load_dir([f] * 3, vectors_per_file=10)
     assert x.shape == (30, 640)
     with pytest.raises(MemoryError):
-        ta.load_dir([str(tmp_path / "normal_id_00_00000000.wav")], max_gb=1e-9)
+        ta.load_dir([f], max_gb=1e-9)
+
+
+def test_int16_scaled_like_librosa(tmp_path):
+    from scipy.io import wavfile
+    f = str(tmp_path / "full_scale.wav")
+    y = np.zeros(10 * ta.SR, np.int16)
+    y[::2] = -32768  # -1.0 exactly with librosa's int16 / 32768
+    wavfile.write(f, ta.SR, y)
+    sr, raw = wavfile.read(f)
+    assert (raw / float(2 ** 15)).min() == -1.0
+    assert ta.wav_vectors(f).shape == (196, 640)
+
+
+def test_short_clip_gives_no_vectors(tmp_path):
+    from scipy.io import wavfile
+    f = str(tmp_path / "short.wav")
+    wavfile.write(f, ta.SR, np.zeros(ta.SR, np.int16))  # 1 s: 32 frames, all before frame 50
+    assert ta.wav_vectors(f).shape == (0, 640)
 
 
 def test_mel_conversion_roundtrip_and_auc():
@@ -52,6 +76,7 @@ def test_train_quantise_export_smoke(tmp_path):
     assert 260_000 < meta["params"] < 280_000  # about 270k as in the reference
     assert meta["input"]["dtype"] == "int8" and meta["input"]["shape"] == [1, 640]
     assert meta["output"]["dtype"] == "int8"
+    assert meta["calibration_vectors"] == 120  # every 5th of 600 vectors, as in the reference
     blob = (tmp_path / "ad_int8.tflite").read_bytes()
     assert blob[4:8] == b"TFL3"  # flatbuffer identifier
     c_src = (tmp_path / "model_data.c").read_text()

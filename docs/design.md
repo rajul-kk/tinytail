@@ -44,7 +44,8 @@ Core usage on RP2040: all measurement code runs on core 0; core 1 is parked exce
 **Model.** The MLPerf Tiny anomaly-detection reference: a fully-connected autoencoder, input 640 (5 stacked frames of 128 log-mel
 bins), 4x Dense(128)+BatchNorm+ReLU, bottleneck Dense(8)+BN+ReLU, 4x Dense(128)+BN+ReLU, output Dense(640). About 270k parameters,
 about 270 KB as int8, which fits flash on both boards and SRAM for activations. Anomaly score is the mean squared reconstruction error.
-This architecture is recalled from the MLPerf Tiny paper and repo and must be confirmed against `mlcommons/tiny` (see scoop_check.md).
+Architecture, features (including the reference's crop to frames 50-249 of each clip) and int8 calibration were checked
+against the `mlcommons/tiny` code on 2026-11-06 (scoop_check.md section 5).
 
 **Dataset: ToyADMOS (DCASE 2020 Task 2, toy car) vs CWRU bearing vibration.**
 

@@ -1,17 +1,26 @@
 """Train, int8-quantise and export the MLPerf Tiny anomaly-detection autoencoder.
 
-Model (as recalled from the MLPerf Tiny / DCASE 2020 Task 2 baseline; still to be checked
-against mlcommons/tiny, see docs/scoop_check.md): input 640 = 5 stacked frames of 128
-log-mel bins; 4 x [Dense(128) BatchNorm ReLU], bottleneck [Dense(8) BatchNorm ReLU],
-4 x [Dense(128) BatchNorm ReLU], Dense(640). Loss: mean squared reconstruction error, which
-is also the anomaly score (averaged over a clip's vectors).
+Model, checked against mlcommons/tiny benchmark/training/anomaly_detection (keras_model.py,
+baseline.yaml, common.py, 02_convert.py; see docs/scoop_check.md section 5): input 640 = 5
+stacked frames of 128 log-mel bins; 4 x [Dense(128) BatchNorm ReLU], bottleneck
+[Dense(8) BatchNorm ReLU], 4 x [Dense(128) BatchNorm ReLU], Dense(640). Adam (lr 1e-3), MSE,
+100 epochs, batch 512, validation split 0.1. The reconstruction MSE is also the anomaly
+score (averaged over a clip's vectors).
 
-Features follow the DCASE 2020 baseline settings: 16 kHz mono, n_fft 1024, hop 512, 128
-mel bands (Slaney mel scale and area normalisation, like librosa's defaults), power 2,
-log-mel = 10 * log10(mel + eps), 5 consecutive frames concatenated. They are computed
-here with numpy/scipy because librosa is not installed; the STFT uses a periodic Hann
-window and reflect padding (center=True), as in older librosa. Small numeric differences
-from librosa are possible and have not been measured.
+Features follow the reference (librosa 0.6.0): native sample rate, n_fft 1024, hop 512, 128
+mel bands (Slaney mel scale and area normalisation), power 2, log-mel = 10 * log10(mel + eps),
+then **only frames 50..249 of each clip are kept** (common.py: `log_mel_spectrogram[:, 50:250]`,
+an MLPerf Tiny addition to the DCASE baseline), then 5 consecutive frames are concatenated:
+a 10 s ToyCar clip gives 196 vectors. Integer samples are scaled like librosa.load
+(int16 / 32768). Computed here with numpy/scipy because librosa is not installed; the STFT
+uses a periodic Hann window and reflect padding (center=True), as librosa 0.6 does. Small
+numeric differences from librosa are possible and have not been measured.
+
+Quantisation follows 02_convert.py's `_quant_fullint_micro_intio` model (`ad01_int8.tflite`):
+full-integer int8 with int8 input and output, calibrated on every 5th training vector
+(`train_data[::5]`). The reference folds BatchNorm into the Dense layers by hand before
+converting; here the TFLite converter folds it (the exported graph has only FULLY_CONNECTED
+ops), which should give the same graph but has not been compared byte for byte.
 
 Framework choice: TensorFlow/Keras, because it was already installed on the development
 machine (TF 2.21, CPU), the MLPerf Tiny reference is a Keras model, and the TFLite
@@ -54,6 +63,8 @@ HOP = 512
 N_MELS = 128
 FRAMES = 5
 DIM = N_MELS * FRAMES
+CROP = (50, 250)  # frames kept per clip, as in the MLPerf Tiny reference
+REP_STRIDE = 5     # every 5th training vector calibrates the int8 model
 
 
 # ------------------------------------------------------------------ features (no TF needed)
@@ -110,13 +121,17 @@ def stack_frames(lm, frames=FRAMES):
     return np.concatenate([lm[t: t + n] for t in range(frames)], axis=1).astype(np.float32)
 
 
-def wav_vectors(path):
+def wav_vectors(path, crop=CROP):
+    """640-dim vectors of one clip: log-mel, keep frames crop[0]..crop[1]-1, stack 5 frames."""
     sr, y = wavfile.read(path)
     if y.ndim > 1:
         y = y[:, 0]  # DCASE files are mono; keep channel 0 otherwise
-    if np.issubdtype(y.dtype, np.integer):
-        y = y / float(np.iinfo(y.dtype).max)
-    return stack_frames(log_mel(y.astype(float), sr))
+    if np.issubdtype(y.dtype, np.signedinteger):
+        y = y / float(2 ** (8 * y.dtype.itemsize - 1))  # librosa.load scaling (int16 / 32768)
+    lm = log_mel(y.astype(float), sr)
+    if crop is not None:
+        lm = lm[crop[0]: crop[1]]
+    return stack_frames(lm)
 
 
 def load_dir(files, vectors_per_file=None, max_gb=1.5, seed=0):
@@ -149,11 +164,15 @@ def build_model(dim=DIM, width=128, bottleneck=8):
     return tf.keras.Model(inp, out, name="ad_autoencoder")
 
 
-def quantise_int8(model, rep_data, n_rep=500):
-    """Full-integer post-training quantisation (int8 weights, activations, input, output).
-    BatchNorm folds into the preceding Dense during conversion."""
+def quantise_int8(model, rep_data, stride=REP_STRIDE, rep_max=None):
+    """Full-integer post-training quantisation (int8 weights, activations, input, output),
+    calibrated on every `stride`-th training vector as in the reference. `rep_max` caps the
+    calibration set (evenly thinned) to save time; any cap is a deviation and is recorded in
+    ad_meta.json. BatchNorm folds into the preceding Dense during conversion."""
     import tensorflow as tf
-    rep = rep_data[np.random.default_rng(0).permutation(len(rep_data))[:n_rep]]
+    rep = rep_data[::stride]
+    if rep_max and len(rep) > rep_max:
+        rep = rep[np.linspace(0, len(rep) - 1, rep_max).astype(int)]
 
     def gen():
         for r in rep:
@@ -226,6 +245,8 @@ def main(argv=None):
     ap.add_argument("--max-files", type=int)
     ap.add_argument("--vectors-per-file", type=int)
     ap.add_argument("--max-gb", type=float, default=1.5)
+    ap.add_argument("--rep-max", type=int,
+                    help="cap the int8 calibration set (default: every 5th vector, no cap)")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args(argv)
 
@@ -255,7 +276,7 @@ def main(argv=None):
                      shuffle=True, verbose=2)
     model.save(os.path.join(a.out, "ad_float.keras"))
 
-    tfl = quantise_int8(model, x)
+    tfl = quantise_int8(model, x, REP_STRIDE, a.rep_max)
     tfl_path = os.path.join(a.out, "ad_int8.tflite")
     with open(tfl_path, "wb") as f:
         f.write(tfl)
@@ -275,6 +296,8 @@ def main(argv=None):
                   "scale": float(inq["quantization"][0]), "zero_point": int(inq["quantization"][1])},
         "output": {"dtype": str(np.dtype(outq["dtype"])),
                    "scale": float(outq["quantization"][0]), "zero_point": int(outq["quantization"][1])},
+        "calibration_vectors": int(min(len(x[::REP_STRIDE]), a.rep_max or len(x))),
+        "frame_crop": list(CROP),
         "epochs": a.epochs, "final_loss": float(hist.history["loss"][-1]),
         "final_val_loss": float(hist.history["val_loss"][-1]),
         "float_vs_int8_mse": {"float_mean": float(f_err.mean()), "int8_mean": float(q_err.mean()),

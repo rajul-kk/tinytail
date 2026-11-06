@@ -79,11 +79,11 @@ trivial (degenerate traces), as `design.md` R1 states.
 | Input | n_mels 128 x frames 5 = 640 | same | none |
 | STFT / mel | librosa 0.6.0 `melspectrogram(n_fft=1024, hop_length=512, n_mels=128, power=2.0)`, native rate (`sr=None`) | same settings; Slaney mel, reflect padding as librosa 0.6 | none |
 | Log | `20 / power * log10(mel + eps)` = 10 log10 for power 2 | same | none |
-| Frame crop | **`log_mel_spectrogram[:, 50:250]`**: only frames 50-249 of each clip (MLPerf Tiny addition, not in DCASE) | missing: all frames used | **fix** |
-| Sample scaling | librosa: int16 / 32768 | int16 / 32767 | **fix** (about 0.0003 dB) |
+| Frame crop | **`log_mel_spectrogram[:, 50:250]`**: only frames 50-249 of each clip (MLPerf Tiny addition, not in DCASE) | missing: all frames used | **fixed** |
+| Sample scaling | librosa: int16 / 32768 | int16 / 32767 | **fixed** (about 0.0003 dB) |
 | Training | Adam (default lr 1e-3), MSE, 100 epochs, batch 512, shuffle, validation split 0.1 | same | none |
 | BN folding | explicit fold before conversion | left to the TFLite converter (graph checked: FC only) | documented |
-| Quantisation | int8 full-integer, `TFLITE_BUILTINS_INT8`, int8 input and output (`ad01_int8.tflite`); representative set **every 5th training vector** (`train_data[::5]`) | 500 random vectors | **fix** (stride 5) |
+| Quantisation | int8 full-integer, `TFLITE_BUILTINS_INT8`, int8 input and output (`ad01_int8.tflite`); representative set **every 5th training vector** (`train_data[::5]`) | 500 random vectors | **fixed** (stride 5; optional `--rep-max` cap, recorded in `ad_meta.json` as a deviation) |
 | Data | ToyCar only | any machine type folder | documented |
 
 ## 6. Remaining follow-ups

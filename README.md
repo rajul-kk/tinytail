@@ -27,7 +27,8 @@ Early skeleton. **No hardware has been bought and no measurements exist.**
   - `analysis`, `cli`: the end-to-end pipeline and the `pwcet-analyse` / `pwcet-synth` commands.
 - `models/train_ad.py`: trains the MLPerf Tiny anomaly-detection autoencoder (640-128x4-8-128x4-640, Keras), applies
   full-integer int8 post-training quantisation and exports `ad_int8.tflite` plus `model_data.c/.h` for TFLite Micro
-  with CMSIS-NN. Run so far **only on random features**.
+  with CMSIS-NN. Checked against the `mlcommons/tiny` reference code (crop to frames 50-249, int8 calibration on every
+  5th training vector; `docs/scoop_check.md` section 5). Run so far **only on random features**.
 - `firmware/`: empty.
 
 Not done: firmware, Renode, any hardware measurement.
