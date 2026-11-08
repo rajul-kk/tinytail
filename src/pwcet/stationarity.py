@@ -2,7 +2,8 @@
 import warnings
 import numpy as np
 from scipy.stats import ks_2samp
-from statsmodels.tsa.stattools import kpss, InterpolationWarning
+from statsmodels.tsa.stattools import kpss
+from statsmodels.tools.sm_exceptions import InterpolationWarning
 from .iid import TestResult
 
 
