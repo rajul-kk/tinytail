@@ -54,3 +54,26 @@ def test_pwcet_rejects_p_above_zeta():
     fit = fit_pot(syn.iid_gpd(N, seed=17), 0.95, gof_reps=0)
     with pytest.raises(ValueError):
         pwcet(fit, 0.5)
+
+
+def _tied_top(n, seed):
+    """Quantised timings: 25 levels, the top one holding 8% of the sample."""
+    rng = np.random.default_rng(seed)
+    p = np.full(25, 0.92 / 24)
+    p[-1] = 0.08
+    return rng.choice(np.arange(50.0, 75.0), size=n, p=p)
+
+
+def test_tied_top_refused_with_reason():
+    with pytest.raises(ValueError, match="exceedances"):
+        fit_pot(_tied_top(20_000, 3), 0.95, gof_reps=0)
+
+
+def test_analyse_skips_a_quantile_with_no_exceedances():
+    from pwcet import analysis as an
+    x = _tied_top(40_000, 4)
+    r = an.analyse(x[:20_000], x[20_000:], an.Config(gof_reps=20), origin="synthetic")
+    if not r["gates"]["passed"]:
+        pytest.skip("gates failed on this draw: " + str(r["gates"]["failed"]))
+    cands = {c["quantile"]: c for c in r["estimates"]["gpd"]["candidates"]}
+    assert "error" in cands[0.95] and "error" not in cands[0.90]

@@ -23,6 +23,9 @@ class PotFit:
         return self.n_exceed / self.n
 
 
+MIN_EXCEED = 10  # fewer strict exceedances than this and the GPD fit is meaningless
+
+
 def is_degenerate(x, min_distinct=20) -> bool:
     """Near-constant traces (e.g. a cacheless core with no interference): EVT not applicable."""
     return np.unique(np.asarray(x)).size < min_distinct
@@ -67,6 +70,9 @@ def fit_pot(x, quantile=0.95, gof_reps=100, seed=0) -> PotFit:
         raise ValueError("degenerate trace: too few distinct values for EVT")
     u = float(np.quantile(x, quantile))
     exc = x[x > u] - u
+    if exc.size < MIN_EXCEED:
+        raise ValueError(f"{exc.size} exceedances over the {quantile} quantile (ties at the top): "
+                         f"need {MIN_EXCEED} for a GPD fit")
     shape, scale = _fit_excesses(exc)
     p = gof_pvalue(exc, shape, scale, gof_reps, seed) if gof_reps else float("nan")
     return PotFit(u, shape, scale, int(exc.size), int(x.size), p)

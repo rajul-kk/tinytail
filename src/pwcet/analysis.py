@@ -176,7 +176,11 @@ def analyse(fit_x, hold_x, cfg: Config | None = None, origin="synthetic", meta=N
     # GPD, all candidate thresholds (sensitivity), lowest passing one is primary
     cands, chosen = [], None
     for q in cfg.quantiles:
-        f = fit_pot(fit_x, q, cfg.gof_reps, cfg.seed)
+        try:
+            f = fit_pot(fit_x, q, cfg.gof_reps, cfg.seed)
+        except ValueError as e:  # e.g. quantised timings with the top of the sample tied
+            cands.append({"quantile": q, "error": str(e)})
+            continue
         row = {"quantile": q, "threshold": f.threshold, "shape": f.shape, "scale": f.scale,
                "n_exceed": f.n_exceed, "gof_pvalue": f.gof_pvalue,
                "pwcet": {_pkey(p): float(pwcet(f, p)) for p in ps}}
