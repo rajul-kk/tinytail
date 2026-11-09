@@ -45,7 +45,7 @@ Not done: TFLM/CMSIS-NN integration, any cross-compiled or on-board firmware run
 - **Tail latency of edge inference.** arXiv 2606.16106 (Jetson Orin Nano: MobileNetV2, ViT-S, Qwen2.5-1.5B) fits a GPD
   above p99 as "a marginal quantile heuristic", without formal i.i.d. tests (burst continuation probability 0.74). It
   sweeps a memory-streaming adversary over 0/2/4 cores and validates on a temporal holdout (p99.9 within ±2.7 %,
-  p99.99 within ±5.7 %). So holdout validation and an interference sweep are already published.
+  p99.99 within ±5.7 %). So holdout validation and an interference sweep are already published. (Read in its first version. v3, 8 Jul 2026, is retitled "Edge-Inference Governors Need Memory-Clock State"; its main text keeps the burst continuation probability of 0.74 and says its guard avoids distributional fits, with the GPD-vs-Gaussian margin comparison in supplement S10. The holdout figures were not found in the v3 main text.)
 - **EVT for ML timing.** Tizpaz-Niari and Sankaranarayanan (arXiv 2404.07170, CAIN 2024) apply GPD peaks over threshold to
   training convergence time and DNN-controller settling time on an Intel server, without i.i.d. tests.
 - **MBPTA practice.** MBPTA-CV (Abella et al., TODAES 2017) is our exponential-tail baseline. Lima, Dias and Barros
